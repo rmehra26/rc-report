@@ -61,6 +61,11 @@ jobs:
 
           echo "LAMBDA_KEY=lambda-${GITHUB_SHA}.zip" >> $GITHUB_ENV
 
+      - name: Validate CloudFormation template
+        run: |
+          aws cloudformation validate-template \
+            --template-body file://infra/template.yaml
+
       - name: Deploy CloudFormation
         run: |
           aws cloudformation deploy \
@@ -70,4 +75,12 @@ jobs:
             --parameter-overrides \
             DeploymentS3Bucket=deployment-rcreport-dev \
             LambdaS3Key=${LAMBDA_KEY} \
-            LayerS3Key=layers/rcreport-layer.zip
+            LayerS3Key=layers/rcreport-layer.zip \
+            --no-fail-on-empty-changeset
+
+      - name: Show CloudFormation stack events on failure
+        if: failure()
+        run: |
+          aws cloudformation describe-stack-events \
+            --stack-name rcreport-dev \
+            --max-items 20
