@@ -1,0 +1,73 @@
+name: Deploy RCReport
+
+on:
+  push:
+    branches:
+      - dev
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_DEV }}
+          aws-region: us-east-1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Package Lambda Layer
+        run: |
+          mkdir -p layer-build/python/lib/python3.11/site-packages
+
+          if [ -s RCReport/requirements.txt ]; then
+            pip install \
+              --platform manylinux2014_x86_64 \
+              --implementation cp \
+              --python-version 311 \
+              --only-binary=:all: \
+              --upgrade \
+              -r RCReport/requirements.txt \
+              -t layer-build/python/lib/python3.11/site-packages
+          fi
+
+          cd layer-build
+          zip -r layer.zip .
+
+          aws s3 cp layer.zip s3://deployment-rcreport-dev/layers/rcreport-layer.zip
+
+      - name: Package Lambda
+        run: |
+          mkdir -p build
+
+          find RCReport -maxdepth 1 -name "*.py" ! -name "test.py" -exec cp {} build/ \;
+
+          cd build
+          zip -r lambda.zip .
+
+          aws s3 cp lambda.zip s3://deployment-rcreport-dev/lambda-${GITHUB_SHA}.zip
+
+          echo "LAMBDA_KEY=lambda-${GITHUB_SHA}.zip" >> $GITHUB_ENV
+
+      - name: Deploy CloudFormation
+        run: |
+          aws cloudformation deploy \
+            --template-file infra/template.yaml \
+            --stack-name rcreport-dev \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+            DeploymentS3Bucket=deployment-rcreport-dev \
+            LambdaS3Key=${LAMBDA_KEY} \
+            LayerS3Key=layers/rcreport-layer.zip
