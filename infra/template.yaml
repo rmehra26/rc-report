@@ -61,7 +61,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: rcreport-schedule
-      ScheduleExpression: rate(5 minutes)
+      ScheduleExpression: cron(30 10 * * ? *)
       State: ENABLED
       Targets:
         - Arn: !GetAtt RCReportLambda.Arn
