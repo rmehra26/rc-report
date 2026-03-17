@@ -1,9 +1,9 @@
-name: Deploy RCReport
+name: Deploy RCReport DEV 
 
 on:
   workflow_dispatch:
 
-permissions:
+permissions:  
   id-token: write
   contents: read
 
